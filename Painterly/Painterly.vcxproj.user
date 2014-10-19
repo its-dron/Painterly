@@ -8,7 +8,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerEnvironment />
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>archie.png longBrushSmall.png</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>round.png longBrushSmall.png</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerEnvironment>PATH=$(OPENCV_DIR)\bin;$(PATH)</LocalDebuggerEnvironment>

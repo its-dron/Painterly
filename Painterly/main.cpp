@@ -12,6 +12,8 @@ using namespace cv;
 using namespace std;
 
 #define SHOW(a) std::cout << #a << "= " << endl << (a) << std::endl
+#define PI 3.1415926535
+#define TWOPI 2*PI
 
 mt19937 mt;
 // Steps:
@@ -31,7 +33,7 @@ int main(int argc, char* argv[]) {
 	brush.convertTo(brush, CV_32F, 1/255.);
 
 	if (brush.channels() == 1)
-		cvtColor(brush, brush, CV_GRAY2BGR); 
+		cvtColor(brush, brush, CV_GRAY2BGR);  
 
 	//namedWindow("out");
 
@@ -39,9 +41,18 @@ int main(int argc, char* argv[]) {
 	Mat importance(im.size(), im.type());
 	sharpnessMap(im, importance);
 
-	vector<float> tensor;
+	Mat orientation(im.rows, im.cols, CV_32F), mag(im.rows, im.cols, CV_32F);
+	vector<float> tensor; 
 	computerTensor(im, tensor);
-	computeOrientation(tensor, im);
+	computeOrientation(tensor, orientation, mag);
+
+	namedWindow("orientation");
+	imshow("orientation", orientation);
+
+	waitKey();
+
+	
+	return 1;
 
 	//while(1) {
 		Mat out = Mat::zeros(im.size(), im.type());
@@ -79,9 +90,6 @@ bool applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 		stencil_ptr = stencil.ptr<float>(i);
 		brush_ptr = brush.ptr<float>(i);
 		for (int j = 0; j < 3*w; j+=3) {
-			/*for (int c = 0; c < 3; c++) {
-			stencil_ptr[j+c] = stencil_ptr[j+c]*(1-brush_ptr[j+c]) + brush_ptr[j+c]*rgb[c];
-			}*/
 			stencil_ptr[j+0] = stencil_ptr[j+0]*(1-brush_ptr[j+0]) + brush_ptr[j+0]*rgb[0];
 			stencil_ptr[j+1] = stencil_ptr[j+1]*(1-brush_ptr[j+1]) + brush_ptr[j+1]*rgb[1];
 			stencil_ptr[j+2] = stencil_ptr[j+2]*(1-brush_ptr[j+2]) + brush_ptr[j+2]*rgb[2];
@@ -144,12 +152,10 @@ void normalize(Mat& im) {
 	if ( (max - min) < 1e-4 )
 		return; 
 
-	im /= max;
-
-	//im = (im - min) / (max - min);
+	im = (im - min) / (max - min);
 }
 
-void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma) {
+void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float factor) {
 	int h = im.rows;
 	int w = im.cols;
 	int N = h*w; 
@@ -162,7 +168,7 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma) {
 	else 
 		cvtColor(im, im_g, CV_BGR2GRAY);
 
-	im_g.mul(im_g);
+	cv::pow(im_g, 0.5, im_g);
 	GaussianBlur(im_g, im_g, Size(9,9), sigma, sigma);
 
 	Mat dx, dy;
@@ -173,8 +179,12 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma) {
 	Mat dxx, dyx, dyy;
 
 	dxx = dx.mul(dx);
-	dyx = dx.mul(dx);
+	dyx = dx.mul(dy);
 	dyy = dy.mul(dy);
+
+	GaussianBlur(dxx, dxx, Size(9,9), factor*sigma, factor*sigma);
+	GaussianBlur(dyx, dyx, Size(9,9), factor*sigma, factor*sigma);
+	GaussianBlur(dyy, dyy, Size(9,9), factor*sigma, factor*sigma);
 
 	int index = 0;
 	for (int i = 0; i < h; i++) {
@@ -186,7 +196,7 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma) {
 	}
 }
 
-void computeOrientation(const vector<float>& tensor, Mat& or) {
+void computeOrientation(const vector<float>& tensor, Mat& or, Mat& mag) {
 	vector<float> eig(2*tensor.size());
 
 	const float* tensor_ptr = tensor.data();
@@ -196,15 +206,21 @@ void computeOrientation(const vector<float>& tensor, Mat& or) {
 
 	eigen2x2(tensor_ptr, eig_ptr, N);
 
-	int offset = 6*sizeof(float);
+	int offset = 6;
+	int index = 0;
 	float e1, e2, arg;
 	for (int i = 0; i < or.rows; i++) {
 		for (int j = 0; j < or.cols; j++) {
-			arg = atan2f(eig_ptr[offset], eig_ptr[offset+1]);
+			arg = atan2f(eig_ptr[index+3], eig_ptr[index+2]);
+
 			if (arg < 0)
-				arg += 2*3.1415926535;
-			arg /= 2*3.1415926535;
+				arg += TWOPI;
+			arg /= TWOPI;
 			or.at<float>(i,j) = arg;
+			mag.at<float>(i,j) = eig_ptr[index];
+			
+
+			index += offset;
 		}
 	}
 }

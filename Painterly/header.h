@@ -9,6 +9,6 @@ int sharpnessMap(const cv::Mat& im, cv::Mat& out, float sigma=1.0);
 
 void normalize(cv::Mat& im);
 
-void computerTensor(const cv::Mat& im, std::vector<float>& tensor, float sigma=1.0);
+void computerTensor(const cv::Mat& im, std::vector<float>& tensor, float sigma=3.0, float factor=5.0);
 
-void computeOrientation(const std::vector<float>& tensor, cv::Mat& or);
+void computeOrientation(const std::vector<float>& tensor, cv::Mat& or, cv::Mat& mag);
