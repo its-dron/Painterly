@@ -5,6 +5,7 @@
 #include <random> 
 #include <time.h>	
 #include <iostream>
+#include <vector>
 
 #include "header.h"
 
@@ -35,9 +36,6 @@ int main(int argc, char* argv[]) {
 	if (brush.channels() == 1)
 		cvtColor(brush, brush, CV_GRAY2BGR);  
 
-	//namedWindow("out");
-
-
 	Mat importance(im.size(), im.type());
 	sharpnessMap(im, importance);
 
@@ -46,24 +44,17 @@ int main(int argc, char* argv[]) {
 	computerTensor(im, tensor);
 	computeOrientation(tensor, orientation, mag);
 
-	namedWindow("orientation");
-	imshow("orientation", orientation);
+	vector<Mat> brushes;
+	computeRotations(brush, brushes);
 
+	Mat out = Mat::zeros(im.size(), im.type());
+
+	//singleScalePaint(im, out, Mat::ones(im.rows, im.cols, CV_32F), brush, 10, 5000);
+	singleScaleOrientedPaint(im, out, orientation, Mat::ones(im.rows,im.cols,CV_32F), brushes, 10, 5000);
+	
+	imshow("out", out);
 	waitKey();
 
-	
-	return 1;
-
-	//while(1) {
-		Mat out = Mat::zeros(im.size(), im.type());
-
-		//singleScalePaint(im, out, Mat::ones(im.rows, im.cols, CV_32F), brush, 10, 5000);
-		singleScalePaint(im, out, importance, brush, 10, 5000);
-	
-		//imshow("out", out);
-
-		//waitKey();
-	//}
 	return 1;
 }
 
@@ -122,6 +113,32 @@ void singleScalePaint(const Mat& im, Mat& out, const Mat& importance, const Mat&
 	}
 }
 
+
+void singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientaiton, const Mat& importance, 
+							  const vector<Mat>& brushes, int size, int N, float noise) {
+	int count = 0;
+
+	uniform_int_distribution<int> randX(0, im.cols-1);
+	uniform_int_distribution<int> randY(0, im.rows-1);
+	uniform_real_distribution<float> rand(0,1);
+	normal_distribution<float> randNrm(0, noise);
+
+	N /= max(1e-1,cv::mean(importance)[0]);
+	int x,y;
+	float r;
+	for (int i = 0; i < N; i++) {
+		x = randX(mt);
+		y = randY(mt);
+		r = rand(mt);
+
+		if (r > importance.at<float>(y,x))
+			continue;
+
+		int index = orientaiton.at<float>(y,x)*12;
+		applyStroke(out, y, x, im.at<Vec3f>(y,x), brushes[index]);
+	}
+}
+
 int sharpnessMap(const Mat& im, Mat& out, float sigma) {
 	Mat im_grey;
 
@@ -161,6 +178,7 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float
 	int N = h*w; 
 	tensor.resize(N*3);
 
+	Size ksize = Size(9 + 4*((int)sigma-1), 9 + 4*((int)sigma-1));
 	Mat im_g;
 
 	if (im.channels() == 1)
@@ -169,7 +187,7 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float
 		cvtColor(im, im_g, CV_BGR2GRAY);
 
 	cv::pow(im_g, 0.5, im_g);
-	GaussianBlur(im_g, im_g, Size(9,9), sigma, sigma);
+	GaussianBlur(im_g, im_g, ksize, sigma, sigma);
 
 	Mat dx, dy;
 
@@ -182,16 +200,18 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float
 	dyx = dx.mul(dy);
 	dyy = dy.mul(dy);
 
-	GaussianBlur(dxx, dxx, Size(9,9), factor*sigma, factor*sigma);
-	GaussianBlur(dyx, dyx, Size(9,9), factor*sigma, factor*sigma);
-	GaussianBlur(dyy, dyy, Size(9,9), factor*sigma, factor*sigma);
+	Size ksize2 = Size(9 + 4*(factor*(int)sigma-1), 9 + factor*4*((int)sigma-1));
+
+	GaussianBlur(dxx, dxx, ksize, factor*sigma, factor*sigma);
+	GaussianBlur(dyx, dyx, ksize, factor*sigma, factor*sigma);
+	GaussianBlur(dyy, dyy, ksize, factor*sigma, factor*sigma);
 
 	int index = 0;
 	for (int i = 0; i < h; i++) {
 		for (int j = 0; j < w; j++) {
-			tensor[index++] = dxx.at<float>(i,j);
-			tensor[index++] = dyx.at<float>(i,j);
 			tensor[index++] = dyy.at<float>(i,j);
+			tensor[index++] = dyx.at<float>(i,j);
+			tensor[index++] = dxx.at<float>(i,j);
 		}
 	}
 }
@@ -211,16 +231,46 @@ void computeOrientation(const vector<float>& tensor, Mat& or, Mat& mag) {
 	float e1, e2, arg;
 	for (int i = 0; i < or.rows; i++) {
 		for (int j = 0; j < or.cols; j++) {
-			arg = atan2f(eig_ptr[index+3], eig_ptr[index+2]);
-
+			arg = atan2f(eig_ptr[index+3], eig_ptr[index+2]); // eigen returns x,y
+			arg /= PI;
 			if (arg < 0)
-				arg += TWOPI;
-			arg /= TWOPI;
-			or.at<float>(i,j) = arg;
-			mag.at<float>(i,j) = eig_ptr[index];
-			
+				arg += 1;
 
+			or.at<float>(i,j) = arg;
+
+			// Use coherance for magnitude
+			e1 = eig_ptr[index];
+			e2 = eig_ptr[index+1];
+
+			mag.at<float>(i,j) = powf((e1 - e2)/(e1 + e2),2);
+		
 			index += offset;
 		}
+	}
+}
+
+void computeRotations(const Mat& brush, vector<Mat>& rotations, int nAngles) {
+	int h = brush.rows;
+	int w = brush.cols;
+
+	int diagonal = (int)sqrt(w*w+h*h);
+
+	int newWidth = diagonal;
+	int newHeight = diagonal;
+	Point2f pc(newHeight/2., newWidth/2.);
+
+	int offsetX = (newWidth - w) / 2;
+	int offsetY = (newHeight - h) / 2;
+	Mat centered = Mat::zeros(newHeight, newWidth, brush.type());
+	brush.copyTo(centered(Range(offsetY, offsetY+h), Range(offsetX, offsetX+w)));
+
+	float theta = 0;
+	float dTheta = 180. / nAngles;
+	rotations.resize(nAngles);
+	for (int i = 0; i < nAngles; i++) {
+		rotations[i].create(newHeight, newWidth, brush.type());
+		Mat R = getRotationMatrix2D(pc, theta, 1);
+		warpAffine(centered, rotations[i], R, rotations[i].size());
+		theta += dTheta;
 	}
 }
