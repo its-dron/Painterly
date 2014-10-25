@@ -22,40 +22,57 @@ mt19937 mt;
 //  - sample high, low
 //  - 
 int main(int argc, char* argv[]) {
-	mt.seed( time(NULL) );
+	mt.seed( 1234 );
 
-	if (argc < 3) 
-		return -1;
+	Mat brush = imread(argv[1]);
 
-	Mat im = imread(argv[1]);
-	Mat brush = imread(argv[2]);
-
-	im.convertTo(im, CV_32F,1/255.);
 	brush.convertTo(brush, CV_32F, 1/255.);
 
 	if (brush.channels() == 1)
 		cvtColor(brush, brush, CV_GRAY2BGR);  
 
-	Mat importance(im.size(), im.type());
-	sharpnessMap(im, importance);
+	Mat brush_small;
+	resize(brush, brush_small, Size(0,0), 0.25, 0.25);
 
-	Mat orientation(im.rows, im.cols, CV_32F), mag(im.rows, im.cols, CV_32F);
-	vector<float> tensor; 
-	computerTensor(im, tensor);
-	computeOrientation(tensor, orientation, mag);
-
-	vector<Mat> brushes;
+	vector<Mat> brushes, brushes_small;
 	computeRotations(brush, brushes);
+	computeRotations(brush_small, brushes_small);
 
-	Mat out = Mat::zeros(im.size(), im.type());
+	Mat importance;
 
-	//singleScalePaint(im, out, Mat::ones(im.rows, im.cols, CV_32F), brush, 10, 5000);
-	singleScaleOrientedPaint(im, out, orientation, Mat::ones(im.rows,im.cols,CV_32F), brushes, 10, 5000);
-	
-	imshow("out", out);
-	waitKey();
+	Mat orientation;
+	Mat mag;
+	vector<float> tensor; 
 
-	return 1;
+	VideoCapture cap(0);
+	if (!cap.isOpened())
+		return -1;
+
+	namedWindow("vid", WINDOW_NORMAL);
+	Mat frame;
+	Mat out;
+	while (true)
+	{
+		cap >> frame;
+		frame.convertTo(frame, CV_32F, 1/255.);
+
+		orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
+		mag = Mat::zeros(frame.rows, frame.cols, CV_32F);
+		out = Mat::zeros(frame.size(), CV_32FC3);
+
+		computerTensor(frame, tensor);
+		computeOrientation(tensor, orientation, mag);
+		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), brushes, 10, 5000);
+
+		sharpnessMap(frame, importance);
+		singleScaleOrientedPaint(frame, out, orientation, importance, brushes_small, 10, 10000);
+
+		imshow("vid", out);
+		if(waitKey(1) >= 0) break;
+	}
+
+	return 0;
+
 }
 
 
@@ -115,7 +132,8 @@ void singleScalePaint(const Mat& im, Mat& out, const Mat& importance, const Mat&
 
 
 void singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientaiton, const Mat& importance, 
-							  const vector<Mat>& brushes, int size, int N, float noise) {
+							  const vector<Mat>& brushes, int size, int N, float noise) 
+{
 	int count = 0;
 
 	uniform_int_distribution<int> randX(0, im.cols-1);
@@ -243,7 +261,7 @@ void computeOrientation(const vector<float>& tensor, Mat& or, Mat& mag) {
 			e2 = eig_ptr[index+1];
 
 			mag.at<float>(i,j) = powf((e1 - e2)/(e1 + e2),2);
-		
+
 			index += offset;
 		}
 	}
