@@ -7,6 +7,8 @@
 #include <iostream>
 #include <vector>
 
+#include <omp.h>
+
 #include "header.h"
 
 using namespace cv;
@@ -24,12 +26,26 @@ mt19937 mt;
 int main(int argc, char* argv[]) {
 	mt.seed( 1234 );
 
-	Mat brush = imread(argv[1]);
+	Mat brush;
+	if (argc > 1)
+		brush = imread(argv[1]);  
+	else
+		brush = imread("longbrush.png");
 
+	Paint(brush, 30);
+
+	return 1;
+}
+
+void Paint(Mat brush, int size, int N, int nAngles, float noise) {
 	brush.convertTo(brush, CV_32F, 1/255.);
 
-	if (brush.channels() == 1)
-		cvtColor(brush, brush, CV_GRAY2BGR);  
+	if (brush.channels() == 3)
+		cvtColor(brush, brush, CV_BGR2GRAY);
+
+	int maxDim = max(brush.cols, brush.rows);
+	float k = size/(float)maxDim;
+	resize(brush, brush, Size(0,0), k, k);
 
 	Mat brush_small;
 	resize(brush, brush_small, Size(0,0), 0.25, 0.25);
@@ -41,12 +57,11 @@ int main(int argc, char* argv[]) {
 	Mat importance;
 
 	Mat orientation;
-	Mat mag;
 	vector<float> tensor; 
 
 	VideoCapture cap(0);
 	if (!cap.isOpened())
-		return -1;
+		return;
 
 	namedWindow("vid", WINDOW_NORMAL);
 	Mat frame;
@@ -57,28 +72,25 @@ int main(int argc, char* argv[]) {
 		frame.convertTo(frame, CV_32F, 1/255.);
 
 		orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
-		mag = Mat::zeros(frame.rows, frame.cols, CV_32F);
 		out = Mat::zeros(frame.size(), CV_32FC3);
 
 		computerTensor(frame, tensor);
-		computeOrientation(tensor, orientation, mag);
-		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), brushes, 10, 5000);
+		computeOrientation(tensor, orientation);
+		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), brushes, 10, 7000);
 
-		sharpnessMap(frame, importance);
+		sharpnessMap(frame, importance, 2);
 		singleScaleOrientedPaint(frame, out, orientation, importance, brushes_small, 10, 10000);
 
 		imshow("vid", out);
 		if(waitKey(1) >= 0) break;
 	}
 
-	return 0;
-
+	return;
 }
 
-
-// Brush and im must have 3 channels
+// im must have 3 channels
 bool applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
-	if (im.channels() != 3 || brush.channels() != 3)
+	if (im.channels() != 3 || brush.channels() != 1)
 		return false;
 
 	int w = brush.cols;
@@ -97,10 +109,11 @@ bool applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 	for (int i = 0; i < h; i++) {
 		stencil_ptr = stencil.ptr<float>(i);
 		brush_ptr = brush.ptr<float>(i);
-		for (int j = 0; j < 3*w; j+=3) {
-			stencil_ptr[j+0] = stencil_ptr[j+0]*(1-brush_ptr[j+0]) + brush_ptr[j+0]*rgb[0];
-			stencil_ptr[j+1] = stencil_ptr[j+1]*(1-brush_ptr[j+1]) + brush_ptr[j+1]*rgb[1];
-			stencil_ptr[j+2] = stencil_ptr[j+2]*(1-brush_ptr[j+2]) + brush_ptr[j+2]*rgb[2];
+		for (int j = 0; j < w; j++) {
+			int j3 = j*3;
+			stencil_ptr[j3+0] = stencil_ptr[j3+0]*(1-brush_ptr[j]) + brush_ptr[j]*rgb[0];
+			stencil_ptr[j3+1] = stencil_ptr[j3+1]*(1-brush_ptr[j]) + brush_ptr[j]*rgb[1];
+			stencil_ptr[j3+2] = stencil_ptr[j3+2]*(1-brush_ptr[j]) + brush_ptr[j]*rgb[2]; 
 		}
 	}
 
@@ -109,6 +122,7 @@ bool applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 
 void singleScalePaint(const Mat& im, Mat& out, const Mat& importance, const Mat& brush, int size, int N, float noise) {
 	int count = 0;
+	mt.seed( 1234 );
 
 	uniform_int_distribution<int> randX(0, im.cols-1);
 	uniform_int_distribution<int> randY(0, im.rows-1);
@@ -153,6 +167,8 @@ void singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientaiton, c
 			continue;
 
 		int index = orientaiton.at<float>(y,x)*12;
+		if (index == 12)
+			index--;
 		applyStroke(out, y, x, im.at<Vec3f>(y,x), brushes[index]);
 	}
 }
@@ -169,12 +185,15 @@ int sharpnessMap(const Mat& im, Mat& out, float sigma) {
 		out.create(im_grey.size(), im_grey.type());
 	}
 
-	GaussianBlur(im_grey, out, Size(9,9), sigma, sigma);
+	Size ksize = Size(9 + 4*((int)sigma-1), 9 + 4*((int)sigma-1));
+	Size ksize2 = Size(9 + 4*((int)(4*sigma)-1), 9 + 4*((int)(4*sigma)-1));
+
+	GaussianBlur(im_grey, out, ksize, sigma, sigma);
 
 	out = im_grey - out;
 	out = out.mul(out);
 
-	GaussianBlur(out, out, Size(9,9), 4*sigma, 4*sigma);
+	GaussianBlur(out, out, ksize2, 4*sigma, 4*sigma);
 	normalize(out);
 
 	return 1;
@@ -234,7 +253,7 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float
 	}
 }
 
-void computeOrientation(const vector<float>& tensor, Mat& or, Mat& mag) {
+void computeOrientation(const vector<float>& tensor, Mat& or) {
 	vector<float> eig(2*tensor.size());
 
 	const float* tensor_ptr = tensor.data();
@@ -244,25 +263,20 @@ void computeOrientation(const vector<float>& tensor, Mat& or, Mat& mag) {
 
 	eigen2x2(tensor_ptr, eig_ptr, N);
 
+	int w = or.cols;
+
 	int offset = 6;
 	int index = 0;
 	float e1, e2, arg;
 	for (int i = 0; i < or.rows; i++) {
 		for (int j = 0; j < or.cols; j++) {
+			index = offset*(i*w + j);
 			arg = atan2f(eig_ptr[index+3], eig_ptr[index+2]); // eigen returns x,y
 			arg /= PI;
 			if (arg < 0)
 				arg += 1;
 
 			or.at<float>(i,j) = arg;
-
-			// Use coherance for magnitude
-			e1 = eig_ptr[index];
-			e2 = eig_ptr[index+1];
-
-			mag.at<float>(i,j) = powf((e1 - e2)/(e1 + e2),2);
-
-			index += offset;
 		}
 	}
 }
