@@ -7,8 +7,6 @@
 #include <iostream>
 #include <vector>
 
-#include <omp.h>
-
 #include "header.h"
 
 using namespace cv;
@@ -30,7 +28,7 @@ int main(int argc, char* argv[]) {
 	if (argc > 1)
 		brush = imread(argv[1]);  
 	else
-		brush = imread("longbrush.png");
+		brush = imread("longBrush2.png");
 
 	Paint(brush, 30);
 
@@ -76,10 +74,10 @@ void Paint(Mat brush, int size, int N, int nAngles, float noise) {
 
 		computerTensor(frame, tensor);
 		computeOrientation(tensor, orientation);
-		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), brushes, 10, 7000);
+		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), brushes, 10, 10000);
 
 		sharpnessMap(frame, importance, 2);
-		singleScaleOrientedPaint(frame, out, orientation, importance, brushes_small, 10, 10000);
+		singleScaleOrientedPaint(frame, out, orientation, importance, brushes_small, 10, 5000);
 
 		imshow("vid", out);
 		if(waitKey(1) >= 0) break;
@@ -116,7 +114,7 @@ bool applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 			stencil_ptr[j3+2] = stencil_ptr[j3+2]*(1-brush_ptr[j]) + brush_ptr[j]*rgb[2]; 
 		}
 	}
-
+	 
 	return true;
 }
 
