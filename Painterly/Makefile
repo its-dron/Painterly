@@ -9,12 +9,12 @@ export LD_LIBRARY_PATH=/home/chase/trash/opencvout/lib/
 CFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config opencv --cflags)
 LIBS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config opencv --libs)
 
-all: run
+all: main run
 
 main : main.cpp header.h
 	g++ -g -Wall -o main main.cpp $(CFLAGS) $(LIBS) -std=c++0x
 
-run: main
+run: 
 	LD_LIBRARY_PATH=/home/chase/trash/opencvout/lib/ && ./main longBrush2.png --novid
 
 runvid: main
