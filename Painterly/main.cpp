@@ -1,6 +1,6 @@
-#include <opencv2\core\core.hpp>
-#include <opencv2\highgui\highgui.hpp>
-#include <opencv2\imgproc\imgproc.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include <random> 
 #include <time.h>	
@@ -30,12 +30,16 @@ int main(int argc, char* argv[]) {
 	else
 		brush = imread("longBrush2.png");
 
-	Paint(brush, 30);
+       if (argc > 2 && std::string(argv[2]) == "--novid") {
+              Paint(brush, 30, true);
+       } else {
+              Paint(brush, 30);
+       }
 
-	return 1;
+	return 0;
 }
 
-void Paint(Mat brush, int size, int N, int nAngles, float noise) {
+void Paint(Mat brush, int size, bool novid, int N, int nAngles, float noise) {
 	brush.convertTo(brush, CV_32F, 1/255.);
 
 	if (brush.channels() == 3)
@@ -56,17 +60,26 @@ void Paint(Mat brush, int size, int N, int nAngles, float noise) {
 
 	Mat orientation;
 	vector<float> tensor; 
+    
 
-	VideoCapture cap(0);
-	if (!cap.isOpened())
-		return;
+       VideoCapture cap(0);
+       if (!novid) {
+              if (!cap.isOpened()) {
+                     printf("video not open\n");
+                     return;
+              }
+       }
 
 	namedWindow("vid", WINDOW_NORMAL);
 	Mat frame;
 	Mat out;
 	while (true)
 	{
-		cap >> frame;
+              if (novid) {
+                     frame = imread("chase.jpg");
+              } else {
+                     cap >> frame;
+              }
 		frame.convertTo(frame, CV_32F, 1/255.);
 
 		orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
@@ -119,7 +132,6 @@ bool applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 }
 
 void singleScalePaint(const Mat& im, Mat& out, const Mat& importance, const Mat& brush, int size, int N, float noise) {
-	int count = 0;
 	mt.seed( 1234 );
 
 	uniform_int_distribution<int> randX(0, im.cols-1);
@@ -146,7 +158,6 @@ void singleScalePaint(const Mat& im, Mat& out, const Mat& importance, const Mat&
 void singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientaiton, const Mat& importance, 
 							  const vector<Mat>& brushes, int size, int N, float noise) 
 {
-	int count = 0;
 
 	uniform_int_distribution<int> randX(0, im.cols-1);
 	uniform_int_distribution<int> randY(0, im.rows-1);
@@ -235,7 +246,6 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float
 	dyx = dx.mul(dy);
 	dyy = dy.mul(dy);
 
-	Size ksize2 = Size(9 + 4*(factor*(int)sigma-1), 9 + factor*4*((int)sigma-1));
 
 	GaussianBlur(dxx, dxx, ksize, factor*sigma, factor*sigma);
 	GaussianBlur(dyx, dyx, ksize, factor*sigma, factor*sigma);
@@ -251,7 +261,7 @@ void computerTensor(const cv::Mat& im, vector<float>& tensor, float sigma, float
 	}
 }
 
-void computeOrientation(const vector<float>& tensor, Mat& or) {
+void computeOrientation(const vector<float>& tensor, Mat& orientation) {
 	vector<float> eig(2*tensor.size());
 
 	const float* tensor_ptr = tensor.data();
@@ -261,20 +271,20 @@ void computeOrientation(const vector<float>& tensor, Mat& or) {
 
 	eigen2x2(tensor_ptr, eig_ptr, N);
 
-	int w = or.cols;
+	int w = orientation.cols;
 
 	int offset = 6;
 	int index = 0;
-	float e1, e2, arg;
-	for (int i = 0; i < or.rows; i++) {
-		for (int j = 0; j < or.cols; j++) {
+	float arg;
+	for (int i = 0; i < orientation.rows; i++) {
+		for (int j = 0; j < orientation.cols; j++) {
 			index = offset*(i*w + j);
 			arg = atan2f(eig_ptr[index+3], eig_ptr[index+2]); // eigen returns x,y
 			arg /= PI;
 			if (arg < 0)
 				arg += 1;
 
-			or.at<float>(i,j) = arg;
+			orientation.at<float>(i,j) = arg;
 		}
 	}
 }
