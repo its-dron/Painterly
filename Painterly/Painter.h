@@ -54,7 +54,7 @@ private:
 					  const cv::Mat& brush, int N=1000, float noise=0.3);
 
 	void singleScaleOrientedPaint(const cv::Mat& im, cv::Mat& out, const cv::Mat& orientation, const cv::Mat& importance, 
-					  const std::vector<cv::Mat>& brushes, int N=1000, float noise=0.3);
+					  const std::vector<cv::Mat>& brushes, int N=1000, float noise=0.025);
 
 	// If we ever modify the brush, call this to update the rotated and resized brushes
 	void updateBrush();
@@ -77,5 +77,6 @@ private:
 	// Given a sigma, calculate the necessary kernel size
 	cv::Size computeKernelSize(float sigma);
 
+	std::vector<int> samplePoints(const cv::Mat& im, const cv::Mat& brush);
 };
 

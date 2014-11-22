@@ -11,6 +11,7 @@ using namespace cv;
 #define SHOW(a) cout << #a << "= " << endl << (a) << endl
 #define PI 3.1415926535
 #define TWOPI 2*PI
+#define ROOT_THREE 1.73205080757
 
 Painter::Painter(void)
 {
@@ -110,6 +111,25 @@ void Painter::singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orien
 	N /= max(1e-1,mean(importance)[0]);
 	int x,y;
 	float r;
+
+	vector<int> points = samplePoints(im, brushes[0]);
+/*
+	for (int i = 0; i < points.size(); i+= 2) {
+		y = points[i];
+		x = points[i+1];
+		r = rand(m_mt);
+
+		if (r > importance.at<float>(y,x))
+			continue;
+
+		int index = orientation.at<float>(y,x)*m_numAngles;
+		if (index == m_numAngles)
+			index = 0;
+
+		applyStroke(out, y, x, 
+			im.at<Vec3f>(y,x) + Vec3f(randNrm(m_mt),randNrm(m_mt),randNrm(m_mt)),
+			brushes[index]);
+	}*/
 	for (int i = 0; i < N; i++) {
 		x = randX(m_mt);
 		y = randY(m_mt);
@@ -121,7 +141,10 @@ void Painter::singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orien
 		int index = orientation.at<float>(y,x)*m_numAngles;
 		if (index == m_numAngles)
 			index = 0;
-		applyStroke(out, y, x, im.at<Vec3f>(y,x), brushes[index]);
+
+		applyStroke(out, y, x, 
+			im.at<Vec3f>(y,x) + Vec3f(randNrm(m_mt),randNrm(m_mt),randNrm(m_mt)),
+			brushes[index]);
 	}
 }
 
@@ -363,4 +386,29 @@ void Painter::PaintStrokeByStroke(const Mat& frame, Mat& out, bool small) {
 		}
 	} else
 		applyStroke(out, y, x, frame.at<Vec3f>(y,x), m_brushes[index]);
+}
+
+vector<int> Painter::samplePoints(const Mat& im, const Mat& brush) {
+	normal_distribution<float> randNrm(0, 0.5);
+
+	vector<int> points;
+	int h = brush.rows;
+	int w = brush.cols;
+	double r = sqrt(h*h + w*w)/6.0;
+	
+	for (int y = 0; y < im.rows; y += r) {
+		for (int x = 0; x < im.cols; x += r*ROOT_THREE) {
+			points.push_back(y + randNrm(m_mt));
+			points.push_back(x + randNrm(m_mt));
+		}
+	}
+	
+	for (int y = r/2; y < im.rows; y += r) {
+		for (int x = r*ROOT_THREE/2; x < im.cols; x += r*ROOT_THREE) {
+			points.push_back(y + randNrm(m_mt));
+			points.push_back(x + randNrm(m_mt));
+		}
+	}
+
+	return points;
 }

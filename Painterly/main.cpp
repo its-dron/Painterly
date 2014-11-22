@@ -15,6 +15,10 @@ using namespace std;
 #define PI 3.1415926535
 #define TWOPI 2*PI
 
+Mat frame;
+Mat out;
+Painter p;
+
 // Steps:
 //  - seperate into high + low frequencies
 //  - sample high, low
@@ -44,7 +48,8 @@ void Paint(Mat brush, int size, bool novid, int N, int nAngles, float noise) {
 	if (brush.channels() == 3)
 		cvtColor(brush, brush, CV_BGR2GRAY);
 
-	Painter p(brush, nAngles);
+	p = Painter(brush, nAngles);
+	p.setStrokeSize(size);
 
 	VideoCapture cap(0);
 	if (!novid) {
@@ -55,8 +60,7 @@ void Paint(Mat brush, int size, bool novid, int N, int nAngles, float noise) {
 	}
 
 	namedWindow("vid", WINDOW_NORMAL);
-	Mat frame;
-	Mat out;
+
 	while (true)
 	{
 		if (novid) {
@@ -74,31 +78,36 @@ void Paint(Mat brush, int size, bool novid, int N, int nAngles, float noise) {
 	return;
 }
 
+static void onMouse( int event, int x, int y, int, void* ) {
+	p.PaintStrokeByStroke(frame, out);
+	imshow("vid", out);	
+}
+
+static void onMouse2( int event, int x, int y, int, void* ) {
+	p.PaintStrokeByStroke(frame, out, true);
+	imshow("vid", out);	
+}
+
 void PaintStrokeByStroke(Mat brush) {
 	brush.convertTo(brush, CV_32F, 1/255.);
 
 	if (brush.channels() == 3)
 		cvtColor(brush, brush, CV_BGR2GRAY);
 
-	Painter p(brush, 36);
+	p = Painter(brush, 36);
 
-	namedWindow("vid", WINDOW_NORMAL);
-	Mat frame = imread("chase.jpg");
+	frame = imread("chase.jpg");
 	frame.convertTo(frame, CV_32F, 1/255.);
 
-	Mat out = Mat::zeros(frame.size(), CV_32FC3);
-	for (int i = 0; i < 5000; i++)
-	{
-		p.PaintStrokeByStroke(frame, out);
-		imshow("vid", out);
-		if(waitKey(1) >= 0) break;
-	}
-	for (int i = 0; i < 5000; i++)
-	{
-		p.PaintStrokeByStroke(frame, out, true);
-		imshow("vid", out);
-		if(waitKey(1) >= 0) break;
-	}
+	out = Mat::zeros(frame.size(), CV_32FC3);
+
+	namedWindow("vid", WINDOW_NORMAL);
+
+	setMouseCallback("vid", onMouse, NULL);
+
+	waitKey(0);
+
+	setMouseCallback("vid", onMouse2, NULL);
 
 	waitKey(0);
 	return;
