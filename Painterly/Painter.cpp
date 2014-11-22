@@ -8,7 +8,7 @@
 using namespace std;
 using namespace cv;
 
-#define SHOW(a) std::cout << #a << "= " << endl << (a) << std::endl
+#define SHOW(a) cout << #a << "= " << endl << (a) << endl
 #define PI 3.1415926535
 #define TWOPI 2*PI
 
@@ -31,28 +31,83 @@ Painter::Painter(const Mat& brush, int numAngles, int brushSize)
 }
 
 void Painter::Paint(Mat frame, Mat& out) {
-		frame.convertTo(frame, CV_32F, 1/255.);
+	frame.convertTo(frame, CV_32F, 1/255.);
 
-		Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
-		out = Mat::zeros(frame.size(), CV_32FC3);
+	Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
+	out = Mat::zeros(frame.size(), CV_32FC3);
 
-		computeOrientation(frame, orientation);
-		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), m_brushes, 10000);
+	computeOrientation(frame, orientation);
+	singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), m_brushes, 10000);
 
-		Mat details;
-		sharpnessMap(frame, details, 2);
-		singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
+	Mat details;
+	sharpnessMap(frame, details, 2);
+	singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
 }
 
-void Painter::singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientation, const Mat& importance, 
-					  const std::vector<Mat>& brushes, int N, float noise)
+void Painter::PaintLargeScale(Mat frame, Mat& out, bool oriented) {
+	frame.convertTo(frame, CV_32F, 1/255.);
+
+	Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
+	out = Mat::zeros(frame.size(), CV_32FC3);
+
+	if (oriented) {
+		computeOrientation(frame, orientation);
+		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), m_brushes, 10000);
+	} else {
+		singleScalePaint(frame, out, Mat::ones(frame.rows, frame.cols, CV_32F), m_brushes[0], 10000);
+	}
+}
+
+void Painter::PaintSmallScale(Mat frame, Mat& out, bool oriented) {
+	frame.convertTo(frame, CV_32F, 1/255.);
+
+	Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
+	out = Mat::zeros(frame.size(), CV_32FC3);
+
+	Mat details;
+	sharpnessMap(frame, details, 2);
+	singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
+
+	if (oriented) {
+		computeOrientation(frame, orientation);
+		singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
+	} else {
+		singleScalePaint(frame, out, details, m_brushesSmall[0], 5000);
+	}
+}
+
+void Painter::singleScalePaint(const Mat& im, Mat& out, const Mat& importance, 
+							   const Mat& brush, int N, float noise)
 {
 	uniform_int_distribution<int> randX(0, im.cols-1);
 	uniform_int_distribution<int> randY(0, im.rows-1);
 	uniform_real_distribution<float> rand(0,1);
 	normal_distribution<float> randNrm(0, noise);
 
-	N /= max(1e-1,cv::mean(importance)[0]);
+	N /= max(1e-1,mean(importance)[0]);
+	int x,y;
+	float r;
+	for (int i = 0; i < N; i++) {
+		x = randX(m_mt);
+		y = randY(m_mt);
+		r = rand(m_mt);
+
+		if (r > importance.at<float>(y,x))
+			continue;
+
+		applyStroke(out, y, x, im.at<Vec3f>(y,x), brush);
+	}
+}
+
+void Painter::singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientation, const Mat& importance, 
+									   const vector<Mat>& brushes, int N, float noise)
+{
+	uniform_int_distribution<int> randX(0, im.cols-1);
+	uniform_int_distribution<int> randY(0, im.rows-1);
+	uniform_real_distribution<float> rand(0,1);
+	normal_distribution<float> randNrm(0, noise);
+
+	N /= max(1e-1,mean(importance)[0]);
 	int x,y;
 	float r;
 	for (int i = 0; i < N; i++) {
@@ -126,6 +181,7 @@ void Painter::computeOrientation(const Mat& frame, Mat& orientation) {
 
 	eigen2x2(tensor_ptr, eig_ptr, N);
 
+	orientation.create(frame.rows, frame.cols, CV_32F);
 	int w = orientation.cols;
 
 	int offset = 6;
@@ -143,7 +199,7 @@ void Painter::computeOrientation(const Mat& frame, Mat& orientation) {
 		}
 	}
 }
-	
+
 void Painter::computerTensor(const Mat& im, vector<float>& tensor, float sigma, float factor) {
 	int h = im.rows;
 	int w = im.cols;
@@ -160,7 +216,7 @@ void Painter::computerTensor(const Mat& im, vector<float>& tensor, float sigma, 
 	else 
 		cvtColor(im, im_g, CV_BGR2GRAY);
 
-	cv::pow(im_g, 0.5, im_g);
+	pow(im_g, 0.5, im_g);
 	GaussianBlur(im_g, im_g, ksize, sigma, sigma);
 
 	Mat dx, dy;
@@ -190,7 +246,7 @@ void Painter::computerTensor(const Mat& im, vector<float>& tensor, float sigma, 
 }
 
 int Painter::sharpnessMap(const Mat& im, Mat& out, float sigma) {
-		Mat im_grey;
+	Mat im_grey;
 
 	if (im.channels() == 1)
 		im_grey = im.clone();
@@ -247,8 +303,8 @@ bool Painter::applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 }
 
 /********************
- * HELPER FUNCTIONS *
- ********************/
+* HELPER FUNCTIONS *
+********************/
 
 void Painter::normalize(Mat& im) {
 	double min, max;
@@ -262,4 +318,49 @@ void Painter::normalize(Mat& im) {
 
 Size Painter::computeKernelSize(float sigma) {
 	return Size(9 + 4*((int)sigma-1), 9 + 4*((int)sigma-1));
+}
+
+
+// HACKS
+
+void Painter::PaintStrokeByStroke(const Mat& frame, Mat& out, bool small) {
+	uniform_int_distribution<int> randX(0, frame.cols-1);
+	uniform_int_distribution<int> randY(0, frame.rows-1);
+	uniform_real_distribution<float> rand(0,1);
+	int x = randX(m_mt);
+	int y = randY(m_mt);
+
+	if (!m_orientation.data) {
+		Mat tmp;
+		cvtColor(frame, tmp, CV_RGB2GRAY);
+		computeOrientation(tmp, m_orientation);
+	}
+	
+	int index = m_orientation.at<float>(y,x)*m_numAngles;
+	if (index == m_numAngles)
+		index = 0;
+
+	if (small) {
+		float r;
+		if (!m_details.data) {
+			Mat tmp;
+			cvtColor(frame, tmp, CV_RGB2GRAY);
+			sharpnessMap(tmp, m_details, 2);
+		}
+		for (int i = 0; i < 100; i++) {
+			x = randX(m_mt);
+			y = randY(m_mt);
+			r = rand(m_mt);
+
+			if (r > m_details.at<float>(y,x))
+				continue;
+
+			int index = m_orientation.at<float>(y,x)*m_numAngles;
+			if (index == m_numAngles)
+				index = 0;
+			applyStroke(out, y, x, frame.at<Vec3f>(y,x), m_brushesSmall[index]);
+			break;
+		}
+	} else
+		applyStroke(out, y, x, frame.at<Vec3f>(y,x), m_brushes[index]);
 }
