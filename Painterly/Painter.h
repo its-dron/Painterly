@@ -3,6 +3,7 @@
 #include <opencv2/core/core.hpp>
 #include <random>
 
+// Class for managing painting. Supports both oriented and non-oriented painting.
 class Painter
 {
 public:
@@ -25,8 +26,6 @@ public:
 	void setTensorSigma2(float tensorSigma2) { m_tensorSigma2 = tensorSigma2; }
 	void setSharpnessSigma(float shaprnessSigma) { m_shaprnessSigma = shaprnessSigma; }
 
-	// HACKS
-	void PaintStrokeByStroke(const cv::Mat& frame, cv::Mat& out, bool small=false);
 private:
 	std::mt19937 m_mt;
 
@@ -66,7 +65,7 @@ private:
 	void computeOrientation(const cv::Mat& frame, cv::Mat& orientation);
 	
 	// Computes the structure tensor
-	void computerTensor(const cv::Mat& im, std::vector<float>& tensor, float sigma=3.0, float factor=5.0);
+	void computeTensor(const cv::Mat& im, std::vector<float>& tensor, float sigma=3.0, float factor=5.0);
 	
 	// Computes the sharpness map of the image.
 	int sharpnessMap(const cv::Mat& im, cv::Mat& out, float sigma=1.0);

@@ -8,9 +8,9 @@
 using namespace std;
 using namespace cv;
 
-#define SHOW(a) cout << #a << "= " << endl << (a) << endl
+//TODO more documentation
+
 #define PI 3.1415926535
-#define TWOPI 2*PI
 
 Painter::Painter(void)
 {
@@ -20,8 +20,7 @@ Painter::Painter(void)
 
 Painter::Painter(const Mat& brush, int numAngles, int brushSize)
 {
-	m_mt.seed(time(NULL));
-	srand (time(NULL));
+	Painter();
 
 	m_originalBrush = brush.clone();
 	m_numAngles = numAngles;
@@ -30,6 +29,10 @@ Painter::Painter(const Mat& brush, int numAngles, int brushSize)
 	updateBrush();
 }
 
+
+/// Paints the specified frame.
+/// frame: image frame to create painting of.
+/// out: Mat to write to.
 void Painter::Paint(Mat frame, Mat& out) {
 	frame.convertTo(frame, CV_32F, 1/255.);
 
@@ -44,13 +47,18 @@ void Painter::Paint(Mat frame, Mat& out) {
 	singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
 }
 
+
+/// Paints the large scale details.
+/// frame: The frame.
+/// out: Mat to write to.
+/// oriented: Defaults to true. Set to false to disable oriented painting
 void Painter::PaintLargeScale(Mat frame, Mat& out, bool oriented) {
 	frame.convertTo(frame, CV_32F, 1/255.);
 
-	Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
 	out = Mat::zeros(frame.size(), CV_32FC3);
 
 	if (oriented) {
+		Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
 		computeOrientation(frame, orientation);
 		singleScaleOrientedPaint(frame, out, orientation, Mat::ones(frame.rows, frame.cols, CV_32F), m_brushes, 10000);
 	} else {
@@ -58,17 +66,21 @@ void Painter::PaintLargeScale(Mat frame, Mat& out, bool oriented) {
 	}
 }
 
+
+/// Paints the small scale.
+/// frame: The frame.
+/// out: Mat to write to.
+/// oriented: Defaults to true. Set to false to disable oriented painting
 void Painter::PaintSmallScale(Mat frame, Mat& out, bool oriented) {
 	frame.convertTo(frame, CV_32F, 1/255.);
 
-	Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
 	out = Mat::zeros(frame.size(), CV_32FC3);
 
 	Mat details;
 	sharpnessMap(frame, details, 2);
-	singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
 
 	if (oriented) {
+		Mat orientation = Mat::zeros(frame.rows, frame.cols, CV_32F);
 		computeOrientation(frame, orientation);
 		singleScaleOrientedPaint(frame, out, orientation, details, m_brushesSmall, 5000);
 	} else {
@@ -76,6 +88,14 @@ void Painter::PaintSmallScale(Mat frame, Mat& out, bool oriented) {
 	}
 }
 
+
+/// Singles the scale paint.
+/// im: The im.
+/// out: The out.
+/// importance: The importance.
+/// brush: The brush.
+/// N: The n.
+/// noise: The noise.
 void Painter::singleScalePaint(const Mat& im, Mat& out, const Mat& importance, 
 							   const Mat& brush, int N, float noise)
 {
@@ -99,6 +119,15 @@ void Painter::singleScalePaint(const Mat& im, Mat& out, const Mat& importance,
 	}
 }
 
+
+/// Singles the scale oriented paint.
+/// im: The im.
+/// out: The out.
+/// orientation: The orientation.
+/// importance: The importance.
+/// brushes: The brushes.
+/// N: The n.
+/// noise: The noise.
 void Painter::singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orientation, const Mat& importance, 
 									   const vector<Mat>& brushes, int N, float noise)
 {
@@ -125,6 +154,7 @@ void Painter::singleScaleOrientedPaint(const Mat& im, Mat& out, const Mat& orien
 	}
 }
 
+/// Updates the brush.
 void Painter::updateBrush() {
 	m_brushes.resize(m_numAngles);
 	m_brushesSmall.resize(m_numAngles);
@@ -142,6 +172,10 @@ void Painter::updateBrush() {
 	computeRotations(brush_small, m_brushesSmall);
 }
 
+
+/// Computes the rotations.
+/// brush: The brush.
+/// rotations: The rotations.
 void Painter::computeRotations(const Mat& brush, vector<Mat>& rotations) {
 	int h = brush.rows;
 	int w = brush.cols;
@@ -168,9 +202,13 @@ void Painter::computeRotations(const Mat& brush, vector<Mat>& rotations) {
 	}
 }
 
+
+/// Computes the orientation.
+/// frame: The frame.
+/// orientation: The orientation.
 void Painter::computeOrientation(const Mat& frame, Mat& orientation) {
 	vector<float> tensor;
-	computerTensor(frame, tensor);
+	computeTensor(frame, tensor);
 
 	vector<float> eig(2*tensor.size());
 
@@ -200,7 +238,13 @@ void Painter::computeOrientation(const Mat& frame, Mat& orientation) {
 	}
 }
 
-void Painter::computerTensor(const Mat& im, vector<float>& tensor, float sigma, float factor) {
+
+/// Computers the tensor.
+/// im: The im.
+/// tensor: The tensor.
+/// sigma: The sigma.
+/// factor: The factor.
+void Painter::computeTensor(const Mat& im, vector<float>& tensor, float sigma, float factor) {
 	int h = im.rows;
 	int w = im.cols;
 	int N = h*w; 
@@ -245,6 +289,11 @@ void Painter::computerTensor(const Mat& im, vector<float>& tensor, float sigma, 
 	}
 }
 
+
+/// Sharpnesses the map.
+/// im: The im.
+/// out: The out.
+/// sigma: The sigma.
 int Painter::sharpnessMap(const Mat& im, Mat& out, float sigma) {
 	Mat im_grey;
 
@@ -271,6 +320,14 @@ int Painter::sharpnessMap(const Mat& im, Mat& out, float sigma) {
 	return 1;
 }
 
+
+/// Applies a single stroke.
+/// im: The im.
+/// y: The y.
+/// x: The x.
+/// rgb: The RGB.
+/// brush: The brush.
+/// <returns></returns>
 bool Painter::applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 	if (im.channels() != 3 || brush.channels() != 1)
 		return false;
@@ -306,6 +363,9 @@ bool Painter::applyStroke(Mat& im, int y, int x, Vec3f rgb, const Mat& brush) {
 * HELPER FUNCTIONS *
 ********************/
 
+
+/// Normalizes the specified image to range [0,1]
+/// im: image to normalize
 void Painter::normalize(Mat& im) {
 	double min, max;
 	minMaxIdx(im, &min, &max, 0, 0);
@@ -316,51 +376,10 @@ void Painter::normalize(Mat& im) {
 	im = (im - min) / (max - min);
 }
 
+
+/// Computes the size of the gaussain kernel based on the sigma.
+/// This wast taken from scipy's gaussian blur.
 Size Painter::computeKernelSize(float sigma) {
 	return Size(9 + 4*((int)sigma-1), 9 + 4*((int)sigma-1));
 }
 
-
-// HACKS
-
-void Painter::PaintStrokeByStroke(const Mat& frame, Mat& out, bool small) {
-	uniform_int_distribution<int> randX(0, frame.cols-1);
-	uniform_int_distribution<int> randY(0, frame.rows-1);
-	uniform_real_distribution<float> rand(0,1);
-	int x = randX(m_mt);
-	int y = randY(m_mt);
-
-	if (!m_orientation.data) {
-		Mat tmp;
-		cvtColor(frame, tmp, CV_RGB2GRAY);
-		computeOrientation(tmp, m_orientation);
-	}
-	
-	int index = m_orientation.at<float>(y,x)*m_numAngles;
-	if (index == m_numAngles)
-		index = 0;
-
-	if (small) {
-		float r;
-		if (!m_details.data) {
-			Mat tmp;
-			cvtColor(frame, tmp, CV_RGB2GRAY);
-			sharpnessMap(tmp, m_details, 2);
-		}
-		for (int i = 0; i < 100; i++) {
-			x = randX(m_mt);
-			y = randY(m_mt);
-			r = rand(m_mt);
-
-			if (r > m_details.at<float>(y,x))
-				continue;
-
-			int index = m_orientation.at<float>(y,x)*m_numAngles;
-			if (index == m_numAngles)
-				index = 0;
-			applyStroke(out, y, x, frame.at<Vec3f>(y,x), m_brushesSmall[index]);
-			break;
-		}
-	} else
-		applyStroke(out, y, x, frame.at<Vec3f>(y,x), m_brushes[index]);
-}
