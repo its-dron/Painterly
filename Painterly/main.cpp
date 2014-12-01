@@ -61,20 +61,23 @@ void Paint(Mat brush, int size, bool novid, int N, int nAngles, float noise) {
 
 	namedWindow("vid", WINDOW_NORMAL);
 
-	while (true)
-	{
-		if (novid) {
-			frame = imread("chase.jpg");
-		} else {
-			cap >> frame;
-		}
-
+	if (novid) {
+		frame = imread("archie.png");
 		p.Paint(frame, out);
-
 		imshow("vid", out);
-		if(waitKey(1) >= 0) break;
-	}
+		waitKey(0);
+	} else {
+		while (true)
+		{
+			cap >> frame;
 
+			p.Paint(frame, out);
+
+			imshow("vid", out);
+
+			if(waitKey(1) >= 0) break;
+		}
+	}
 	return;
 }
 
@@ -96,7 +99,12 @@ void PaintStrokeByStroke(Mat brush) {
 
 	p = Painter(brush, 36);
 
-	frame = imread("chase.jpg");
+	frame = imread("archie.png");
+	if (!frame.data) {
+		cout << "Couldn't load image" << endl;
+		return;
+	}
+
 	frame.convertTo(frame, CV_32F, 1/255.);
 
 	out = Mat::zeros(frame.size(), CV_32FC3);
