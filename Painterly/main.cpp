@@ -47,6 +47,7 @@ void Setup(Mat brush, int size, int N, int nAngles, float noise) {
 	// TODO: add noise
 }
 
+// The main paint loop!
 void Paint(bool novid) {
 
 	VideoCapture cap(0);
